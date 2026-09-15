@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { db, auth } from "../../services/firebase";
 import {
@@ -13,15 +13,21 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
+import ModalTambahOrtu from "./ModalTambahOrtu";
 
 export default function DaftarSiswa() {
   const { currentUser } = useAuth();
   const [siswaList, setSiswaList] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(true);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [detailSiswa, setDetailSiswa] = useState(null);
+  const [siswaForOrtu, setSiswaForOrtu] = useState(null);
+  const [riwayatInput, setRiwayatInput] = useState([]);
+  const [jumlahHariIni, setJumlahHariIni] = useState(0);
+
+  const namaRef = useRef(null);
 
   const [form, setForm] = useState({
     nama: "",
@@ -40,6 +46,15 @@ export default function DaftarSiswa() {
       const snap = await getDocs(q);
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setSiswaList(list);
+
+      const today = new Date().toISOString().slice(0, 10);
+      const hariIni = list.filter((s) => {
+        const tgl = s.createdAt?.seconds
+          ? new Date(s.createdAt.seconds * 1000).toISOString().slice(0, 10)
+          : "";
+        return tgl === today;
+      });
+      setJumlahHariIni(hariIni.length);
     } catch (err) {
       console.error("Gagal load siswa:", err);
     }
@@ -54,29 +69,33 @@ export default function DaftarSiswa() {
   }
 
   async function handleTambahSiswa(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!form.nama || !form.email || !form.password) {
-      return alert("Nama, email, dan password wajib diisi");
+      setErrorMsg("Nama, email, dan password wajib diisi");
+      return;
     }
     if (form.password.length < 6) {
-      return alert("Password minimal 6 karakter");
+      setErrorMsg("Password minimal 6 karakter");
+      return;
     }
 
     setLoading(true);
     setErrorMsg("");
+    setSuccessMsg("");
+
     try {
       const cred = await createUserWithEmailAndPassword(
         auth,
-        form.email,
+        form.email.trim().toLowerCase(),
         form.password
       );
 
       await addDoc(collection(db, "users"), {
         uid: cred.user.uid,
-        nama: form.nama,
-        email: form.email,
+        nama: form.nama.trim(),
+        email: form.email.trim().toLowerCase(),
         role: "siswa",
-        halaqah: form.halaqah,
+        halaqah: form.halaqah.trim(),
         guruId: currentUser.uid,
         createdAt: serverTimestamp(),
       });
@@ -84,29 +103,55 @@ export default function DaftarSiswa() {
       await addDoc(collection(db, "siswa_guru"), {
         siswaId: cred.user.uid,
         guruId: currentUser.uid,
-        nama: form.nama,
-        email: form.email,
-        halaqah: form.halaqah,
+        nama: form.nama.trim(),
+        email: form.email.trim().toLowerCase(),
+        halaqah: form.halaqah.trim(),
         createdAt: serverTimestamp(),
       });
 
-      setSuccessMsg(`Siswa ${form.nama} berhasil ditambahkan! 🎉`);
-      setForm({ nama: "", email: "", password: "123456", halaqah: "" });
-      setShowForm(false);
-      setTimeout(() => setSuccessMsg(""), 4000);
+      setRiwayatInput((prev) => [
+        {
+          nama: form.nama.trim(),
+          email: form.email.trim().toLowerCase(),
+          halaqah: form.halaqah.trim(),
+          waktu: new Date(),
+        },
+        ...prev.slice(0, 4),
+      ]);
+
+      setSuccessMsg(`✅ ${form.nama.trim()} berhasil ditambahkan!`);
+      setForm({
+        nama: "",
+        email: "",
+        password: "123456",
+        halaqah: form.halaqah,
+      });
+
+      setTimeout(() => {
+        namaRef.current?.focus();
+      }, 100);
+
+      setTimeout(() => setSuccessMsg(""), 3000);
     } catch (err) {
       console.error(err);
       if (err.code === "auth/email-already-in-use") {
-        setErrorMsg("Email sudah terdaftar. Pakai email lain.");
+        setErrorMsg("❌ Email sudah terdaftar. Pakai email lain.");
       } else if (err.code === "auth/weak-password") {
-        setErrorMsg("Password minimal 6 karakter.");
+        setErrorMsg("❌ Password minimal 6 karakter.");
       } else if (err.code === "auth/invalid-email") {
-        setErrorMsg("Format email tidak valid.");
+        setErrorMsg("❌ Format email tidak valid.");
       } else {
-        setErrorMsg("Gagal tambah siswa: " + err.message);
+        setErrorMsg("❌ Gagal tambah siswa: " + err.message);
       }
     }
     setLoading(false);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleTambahSiswa();
+    }
   }
 
   async function handleHapus(siswa) {
@@ -127,26 +172,32 @@ export default function DaftarSiswa() {
 
   return (
     <div className="space-y-6">
+      {/* HEADER + COUNTER */}
       <div className="bg-white rounded-xl shadow p-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-start mb-4 flex-wrap gap-3">
           <div>
             <h2 className="text-xl font-bold text-emerald-700">
               👥 Daftar Siswa
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              Total: {siswaList.length} siswa
+              Total: <strong>{siswaList.length} siswa</strong>
+              {jumlahHariIni > 0 && (
+                <span className="text-emerald-600 ml-2">
+                  (+{jumlahHariIni} hari ini)
+                </span>
+              )}
             </p>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
           >
-            {showForm ? "✖ Tutup" : "➕ Tambah Siswa"}
+            {showForm ? "✖ Tutup Form" : "➕ Tambah Siswa"}
           </button>
         </div>
 
         {successMsg && (
-          <div className="bg-emerald-50 text-emerald-700 p-3 rounded-lg mb-4">
+          <div className="bg-emerald-50 text-emerald-700 p-3 rounded-lg mb-4 font-medium">
             {successMsg}
           </div>
         )}
@@ -157,28 +208,34 @@ export default function DaftarSiswa() {
           </div>
         )}
 
+        {/* FORM TAMBAH SISWA */}
         {showForm && (
           <form
             onSubmit={handleTambahSiswa}
             className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4"
           >
-            <div className="md:col-span-2">
-              <p className="text-sm text-gray-600 mb-2">
-                💡 Siswa akan otomatis dapat akun. Password default:{" "}
-                <strong>123456</strong> (bisa diubah).
+            <div className="md:col-span-2 bg-blue-50 rounded-lg p-3">
+              <p className="text-sm text-blue-800">
+                💡 <strong>Tips cepat:</strong> Setelah simpan, kursor otomatis
+                ke field Nama. Tekan{" "}
+                <kbd className="bg-white px-1 rounded border">Enter</kbd> untuk
+                simpan cepat. Halaqah dipertahankan untuk siswa berikutnya.
               </p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nama Siswa
+                Nama Siswa *
               </label>
               <input
+                ref={namaRef}
                 type="text"
                 name="nama"
                 value={form.nama}
                 onChange={handleChange}
+                onKeyDown={handleKeyDown}
                 required
+                autoFocus
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                 placeholder="Ahmad Fauzan"
               />
@@ -193,6 +250,7 @@ export default function DaftarSiswa() {
                 name="halaqah"
                 value={form.halaqah}
                 onChange={handleChange}
+                onKeyDown={handleKeyDown}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                 placeholder="Halaqah A / Kelas 3"
               />
@@ -200,13 +258,14 @@ export default function DaftarSiswa() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
+                Email *
               </label>
               <input
                 type="email"
                 name="email"
                 value={form.email}
                 onChange={handleChange}
+                onKeyDown={handleKeyDown}
                 required
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                 placeholder="fauzan@test.com"
@@ -215,13 +274,14 @@ export default function DaftarSiswa() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
+                Password *
               </label>
               <input
                 type="text"
                 name="password"
                 value={form.password}
                 onChange={handleChange}
+                onKeyDown={handleKeyDown}
                 required
                 minLength={6}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -235,19 +295,49 @@ export default function DaftarSiswa() {
                 disabled={loading}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-lg transition disabled:opacity-50"
               >
-                {loading ? "Menambahkan..." : "💾 Simpan Siswa Baru"}
+                {loading
+                  ? "⏳ Menyimpan..."
+                  : "💾 Simpan & Lanjut Siswa Berikutnya"}
               </button>
             </div>
           </form>
         )}
       </div>
 
+      {/* RIWAYAT INPUT */}
+      {riwayatInput.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl shadow-sm p-4">
+          <h3 className="text-sm font-bold text-emerald-800 mb-2">
+            📋 Baru saja diinput ({riwayatInput.length} terakhir)
+          </h3>
+          <div className="space-y-1">
+            {riwayatInput.map((r, idx) => (
+              <div
+                key={idx}
+                className="text-xs text-emerald-700 flex items-center gap-2 bg-white rounded px-3 py-1.5"
+              >
+                <span className="font-medium">{r.nama}</span>
+                <span className="text-emerald-400">•</span>
+                <span>{r.email}</span>
+                {r.halaqah && (
+                  <>
+                    <span className="text-emerald-400">•</span>
+                    <span>{r.halaqah}</span>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* LIST SISWA */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {siswaList.length === 0 ? (
           <div className="md:col-span-2 lg:col-span-3 bg-white rounded-xl shadow p-8 text-center">
             <p className="text-4xl mb-2">👥</p>
             <p className="text-gray-500">
-              Belum ada siswa. Klik "Tambah Siswa" untuk memulai.
+              Belum ada siswa. Isi form di atas untuk memulai.
             </p>
           </div>
         ) : (
@@ -273,7 +363,7 @@ export default function DaftarSiswa() {
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-3 border-t">
+              <div className="flex gap-1.5 pt-3 border-t">
                 <button
                   onClick={() => setDetailSiswa(s)}
                   className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium py-2 rounded-lg"
@@ -281,8 +371,15 @@ export default function DaftarSiswa() {
                   📊 Detail
                 </button>
                 <button
+                  onClick={() => setSiswaForOrtu(s)}
+                  className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium py-2 rounded-lg"
+                >
+                  👨‍👩‍👧 Ortu
+                </button>
+                <button
                   onClick={() => handleHapus(s)}
-                  className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium px-3 py-2 rounded-lg"
+                  className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium px-2.5 py-2 rounded-lg"
+                  title="Hapus siswa"
                 >
                   🗑️
                 </button>
@@ -292,10 +389,24 @@ export default function DaftarSiswa() {
         )}
       </div>
 
+      {/* MODAL DETAIL SISWA */}
       {detailSiswa && (
         <DetailSiswaModal
           siswa={detailSiswa}
           onClose={() => setDetailSiswa(null)}
+        />
+      )}
+
+      {/* MODAL TAMBAH ORTU */}
+      {siswaForOrtu && (
+        <ModalTambahOrtu
+          siswa={siswaForOrtu}
+          currentUser={currentUser}
+          onClose={() => setSiswaForOrtu(null)}
+          onSuccess={(msg) => {
+            setSuccessMsg(msg);
+            setTimeout(() => setSuccessMsg(""), 5000);
+          }}
         />
       )}
     </div>
@@ -303,7 +414,7 @@ export default function DaftarSiswa() {
 }
 
 // ====================================================
-// KOMPONEN MODAL DETAIL SISWA — DENGAN 2 TAB
+// MODAL DETAIL SISWA
 // ====================================================
 function DetailSiswaModal({ siswa, onClose }) {
   const { currentUser } = useAuth();
