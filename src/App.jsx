@@ -5,6 +5,8 @@ import DashboardGuru from "./pages/guru/DashboardGuru";
 import DashboardOrtu from "./pages/ortu/DashboardOrtu";
 import DashboardSiswa from "./pages/siswa/DashboardSiswa";
 
+const basename = import.meta.env.PROD ? "/quranku-monitor" : "/";
+
 function PrivateRoute({ children, allowRole }) {
   const { currentUser, userRole } = useAuth();
   if (!currentUser) return <Navigate to="/login" replace />;
@@ -25,7 +27,7 @@ function HomeRedirect() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<HomeRedirect />} />
