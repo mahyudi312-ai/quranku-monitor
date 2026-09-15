@@ -1,0 +1,59 @@
+﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./contexts/AuthContext";
+import Login from "./pages/auth/Login";
+import DashboardGuru from "./pages/guru/DashboardGuru";
+import DashboardOrtu from "./pages/ortu/DashboardOrtu";
+import DashboardSiswa from "./pages/siswa/DashboardSiswa";
+
+function PrivateRoute({ children, allowRole }) {
+  const { currentUser, userRole } = useAuth();
+  if (!currentUser) return <Navigate to="/login" replace />;
+  if (allowRole && userRole && !allowRole.includes(userRole)) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+function HomeRedirect() {
+  const { currentUser, userRole } = useAuth();
+  if (!currentUser) return <Navigate to="/login" replace />;
+  if (userRole === "guru") return <Navigate to="/guru" replace />;
+  if (userRole === "ortu") return <Navigate to="/ortu" replace />;
+  if (userRole === "siswa") return <Navigate to="/siswa" replace />;
+  return <div className="p-8 text-center">Memuat...</div>;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<HomeRedirect />} />
+        <Route
+          path="/guru/*"
+          element={
+            <PrivateRoute allowRole={["guru"]}>
+              <DashboardGuru />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/ortu/*"
+          element={
+            <PrivateRoute allowRole={["ortu"]}>
+              <DashboardOrtu />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/siswa/*"
+          element={
+            <PrivateRoute allowRole={["siswa"]}>
+              <DashboardSiswa />
+            </PrivateRoute>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+}
