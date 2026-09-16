@@ -28,10 +28,8 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
   async function handleFileChange(e) {
     const f = e.target.files[0];
     if (!f) return;
-
     setFile(f);
     setHasil(null);
-
     try {
       const data = await readExcelFile(f);
       setOrtuList(data);
@@ -40,12 +38,9 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
     }
   }
 
-  // ============ CACHE SISWA ============
   async function cariSiswa(namaAnak) {
     const key = namaAnak.toLowerCase().trim();
-
     if (cacheSiswa[key] !== undefined) return cacheSiswa[key];
-
     try {
       const q = query(
         collection(db, "users"),
@@ -66,12 +61,9 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
     }
   }
 
-  // ============ CACHE ORTU ============
   async function cariOrtu(emailOrtu) {
     const key = emailOrtu.toLowerCase().trim();
-
     if (cacheOrtu[key] !== undefined) return cacheOrtu[key];
-
     try {
       const q = query(
         collection(db, "users"),
@@ -93,7 +85,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
     }
   }
 
-  // ============ CEK SUDAH TERTAUT ============
   async function cekTautan(ortuUid, siswaId) {
     const q = query(
       collection(db, "ortu_anak"),
@@ -104,7 +95,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
     return snap.docs.length > 0;
   }
 
-  // ============ PROSES IMPORT ============
   async function handleImport() {
     if (ortuList.length === 0) return;
     setLoading(true);
@@ -122,7 +112,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
       const ortu = ortuList[i];
       setCurrentProgress(i + 1);
 
-      // Validasi
       const validation = validateOrtu(ortu);
       if (!validation.valid) {
         hasilImport.gagal.push({
@@ -133,7 +122,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
         continue;
       }
 
-      // Cari siswa
       const siswa = await cariSiswa(ortu.nama_anak);
       if (!siswa) {
         hasilImport.gagal.push({
@@ -147,17 +135,14 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
       const emailLower = ortu.email_ortu.toLowerCase().trim();
 
       try {
-        // ========== CEK / BUAT AKUN ORTU ==========
         let ortuUid = null;
         let isAkunBaru = false;
 
         const existingOrtu = await cariOrtu(emailLower);
 
         if (existingOrtu) {
-          // Ortu sudah ada → pakai UID-nya
           ortuUid = existingOrtu.uid;
         } else {
-          // Ortu belum ada → buat akun baru
           const cred = await createUserWithEmailAndPassword(
             auth,
             emailLower,
@@ -166,7 +151,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
           ortuUid = cred.user.uid;
           isAkunBaru = true;
 
-          // Simpan user ortu baru
           await addDoc(collection(db, "users"), {
             uid: ortuUid,
             nama: ortu.nama_ortu,
@@ -176,7 +160,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
             createdAt: serverTimestamp(),
           });
 
-          // Update cache
           setCacheOrtu((prev) => ({
             ...prev,
             [emailLower]: {
@@ -193,7 +176,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
           hasilImport.akunBaru++;
         }
 
-        // ========== CEK APAKAH SUDAH TERTAUT ==========
         const sudahTertaut = await cekTautan(ortuUid, siswa.id);
 
         if (sudahTertaut) {
@@ -203,7 +185,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
             alasan: "Sudah tertaut sebelumnya (duplikat)",
           });
         } else {
-          // ========== BUAT TAUTAN ==========
           await addDoc(collection(db, "ortu_anak"), {
             ortuId: ortuUid,
             ortuEmail: emailLower,
@@ -243,7 +224,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
         });
       }
 
-      // Delay untuk hindari rate limit
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
 
@@ -262,9 +242,9 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
     ? Math.round((currentProgress / ortuList.length) * 100)
     : 0;
 
-  // Hitung unique ortu di preview
-  const uniqueOrtu = new Set(ortuList.map((o) => (o.email_ortu || "").toLowerCase()))
-    .size;
+  const uniqueOrtu = new Set(
+    ortuList.map((o) => (o.email_ortu || "").toLowerCase())
+  ).size;
 
   return (
     <div
@@ -289,13 +269,9 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
         </div>
 
         <div className="p-6 space-y-5">
-          {/* Step 1: Download Template */}
           <div className="bg-blue-50 rounded-lg p-4">
             <p className="text-sm font-semibold text-blue-800 mb-2">
               Langkah 1: Download Template
-            </p>
-            <p className="text-xs text-blue-700 mb-3">
-              Isi kolom: <strong>nama_ortu, hubungan, nama_anak, email_ortu, password</strong>
             </p>
             <button
               onClick={downloadTemplateOrtu}
@@ -305,19 +281,16 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
             </button>
           </div>
 
-          {/* Info: 1 Ortu Multi Anak */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
             <p className="text-xs text-amber-800">
               💡 <strong>Info:</strong> Kalau 1 ortu punya beberapa anak, tulis
-              beberapa baris dengan <strong>email_ortu yang sama</strong>. Sistem
-              otomatis pakai akun yang sama & tautkan ke semua anak.
+              beberapa baris dengan <strong>email_ortu yang sama</strong>.
             </p>
           </div>
 
-          {/* Step 2: Upload */}
           <div className="bg-emerald-50 rounded-lg p-4">
             <p className="text-sm font-semibold text-emerald-800 mb-2">
-              Langkah 2: Upload File yang Sudah Diisi
+              Langkah 2: Upload File
             </p>
             <input
               ref={fileInputRef}
@@ -333,42 +306,13 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
                 {uniqueOrtu < ortuList.length && (
                   <span className="text-amber-700">
                     {" "}
-                    ({uniqueOrtu} ortu unik, {ortuList.length - uniqueOrtu} multi-anak)
+                    ({uniqueOrtu} ortu unik)
                   </span>
                 )}
               </div>
             )}
           </div>
 
-          {/* Preview */}
-          {ortuList.length > 0 && !hasil && (
-            <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
-              <p className="text-sm font-semibold text-gray-700 mb-2">
-                Preview ({ortuList.length} baris):
-              </p>
-              <div className="space-y-1">
-                {ortuList.slice(0, 8).map((o, idx) => (
-                  <div key={idx} className="text-xs text-gray-600 flex gap-2">
-                    <span className="font-mono text-gray-400">
-                      {String(idx + 1).padStart(2, "0")}.
-                    </span>
-                    <span className="font-medium">{o.nama_ortu || "-"}</span>
-                    <span className="text-gray-400">|</span>
-                    <span className="text-blue-600">{o.hubungan}</span>
-                    <span className="text-gray-400">→</span>
-                    <span>{o.nama_anak}</span>
-                  </div>
-                ))}
-                {ortuList.length > 8 && (
-                  <p className="text-xs text-gray-400 italic mt-2">
-                    ... dan {ortuList.length - 8} lainnya
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Progress */}
           {loading && (
             <div>
               <div className="flex justify-between text-sm mb-1">
@@ -388,7 +332,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
             </div>
           )}
 
-          {/* Hasil */}
           {hasil && (
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
@@ -396,7 +339,7 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
                   <p className="text-2xl font-bold text-emerald-700">
                     {hasil.akunBaru}
                   </p>
-                  <p className="text-xs text-gray-600 mt-1">🆕 Akun Baru</p>
+                  <p className="text-xs text-gray-600 mt-1">🆕 Akun</p>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-3 text-center">
                   <p className="text-2xl font-bold text-blue-700">
@@ -410,20 +353,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
                   </p>
                   <p className="text-xs text-gray-600 mt-1">❌ Gagal</p>
                 </div>
-              </div>
-
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                <p className="text-xs text-emerald-800">
-                  ✅ <strong>{hasil.berhasil.length}</strong> ortu berhasil
-                  ditautkan ke anak.
-                  {hasil.akunBaru > 0 && (
-                    <>
-                      {" "}
-                      Dari jumlah itu, <strong>{hasil.akunBaru}</strong> akun ortu
-                      baru dibuat.
-                    </>
-                  )}
-                </p>
               </div>
 
               {hasil.gagal.length > 0 && (
@@ -441,7 +370,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
             </div>
           )}
 
-          {/* Tombol Aksi */}
           <div className="flex gap-2 pt-2">
             {!hasil ? (
               <>
@@ -471,13 +399,6 @@ export default function ModalImportOrtu({ onClose, onSuccess, currentUser }) {
               </button>
             )}
           </div>
-
-          {!loading && ortuList.length > 0 && !hasil && (
-            <p className="text-xs text-amber-600 text-center">
-              ⚠️ Estimasi waktu: ~{Math.ceil(ortuList.length * 0.5)} detik
-              (delay 250ms per baris untuk hindari rate limit Firebase)
-            </p>
-          )}
         </div>
       </div>
     </div>
